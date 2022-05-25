@@ -1,12 +1,26 @@
 # ETHstaking
+
 Create ETH validators using the Coinbase Cloud APIs
 
+Use Coinbase Cloud UI to spin up a Cluster: [here](https://console.cloud.coinbase.com/participate)
 
-//Use Coinbase Cloud UI to spin up a Cluster:  app.coinbase.co/particpate This can also be accomplished programatically
+This can also be accomplished programatically
 
+First, generate an API key in the UI: [here](https://console.cloud.coinbase.com/api-token-management)
+
+Collect your wallet address and private key
+
+```
 import requests
 
-url = "https://api.bisontrails.co/eth2/v1/clusters"
+baseUrl = "https://api.coinbasecloud.net/eth2/v1/"
+apiToken = "XGXD...WV"
+walletAddr = "0x01...f09"
+headers = {
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "apikey": apiToken
+}
 
 payload = {
     "name": "demo_cluster",
@@ -15,69 +29,65 @@ payload = {
     "client": "lighthouse",
     "remoteSigner": False
 }
-headers = {
-    "Accept": "application/json",
-    "Content-Type": "application/json"
-}
 
-response = requests.post(url, json=payload, headers=headers)
+response = requests.post(baseUrl+"clusters", json=payload, headers=headers)
+```
 
-print(response.text)
+GET ResourceID for Clusters
 
-//Generate API key in the UI: app.coinbase.co/api-token-management
-//Have to see if this can be done programatically
+```
+response = requests.request("GET", baseUrl+"clusters", headers=headers)
 
+body=response.json()
 
-//GET ResourceID for Clusters
+clusterID=body['clusters'][0]['resourceID']
+```
 
+Create your Validators (1 to 334) in the Cluster
 
-import requests
-
-url = "https://api.bisontrails.co/eth2/v1/clusters"
-
-payload={}
-headers = {
-  'apikey': '{{token}}'
-}
-
-response = requests.request("GET", url, headers=headers, data=payload)
-
-print(response.text)
-
-
-//Create your Validators (1 to 334) in the Cluster using this POST
-
-import requests
-
-url = "https://api.bisontrails.co/eth2/v1/validators"
-
+```
 payload = {
     "count": 1,
     "resultType": "depositData",
-    "targetResource": "{{ResourceID}}",
+    "targetResource": clusterID,
     "eth1WithdrawalAddress": "{{eth1WalletAddress}}"
 }
-headers = {
-    "Accept": "application/json",
-    "Content-Type": "application/json"
-}
 
-response = requests.post(url, json=payload, headers=headers)
+response = requests.post(baseUrl+"validators", json=payload, headers=headers)
 
-print(response.text)
+body=response.json()
 
-//Returns {{AllocationID}}
+allocationID=body['allocationID']
+```
 
-//Run GET Allocation to return your DepositData body
-  
-import requests
+Run GET Allocation to return your DepositData body
 
-url = "https://api.bisontrails.co/eth2/v1/allocations/%7B%7BAllocationID%7D%7D"
+```
+response = requests.get(baseUrl+"allocations/"+allocationID, headers=headers)
 
-headers = {"Accept": "application/json"}
+body=response.json()
 
-response = requests.get(url, headers=headers)
+//the raw hash to submit to the staking contract
+rawHash=body['depositData'][0]['raw']
 
-print(response.text)
+//formatted body to use with ethereal
+formattedBody=body['depositData'][0]['formatted']
 
-//Use ethereal utility to submit DepositData https://github.com/wealdtech/ethereal
+f = open("deposit-data-formatted.json", "a")
+f.write(formattedBody)
+f.close()
+//save this to file
+```
+
+Use ethereal utility to submit DepositData https://github.com/wealdtech/ethereal
+
+```
+DEPOSITDATA=$(cat ./deposit-data-formatted.json)
+
+ethereal beacon deposit \
+      --network=goerli \
+      --data="$DEPOSITDATA" \
+      --privatekey=$WALLETPRIVKEY \
+      --from=$WALLETADDR \
+      --value="32 Ether"
+```
